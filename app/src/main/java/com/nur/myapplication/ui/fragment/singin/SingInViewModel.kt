@@ -1,7 +1,10 @@
 package com.nur.myapplication.ui.fragment.singin
 
+import android.accounts.Account
+import android.accounts.AccountManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nur.domain.models.auth.AuthModel
 import com.nur.domain.usecase.SingInUseCase
 import com.nur.myapplication.models.auth.toUI
 import com.nur.myapplication.ui.fragment.singin.state.SignInIntent
@@ -14,9 +17,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
 @HiltViewModel
 class SingInViewModel @Inject constructor(
-    private val signInUseCase: SingInUseCase
+    private val signInUseCase: SingInUseCase,
+    private val accountManager: AccountManager
 ) : ViewModel() {
 
     private val _signInState = MutableStateFlow<SingInState>(SingInState.Idle)
@@ -51,7 +56,13 @@ class SingInViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 signInUseCase(email, password).collect { loginResponse ->
-                    _signInState.value = SingInState.Success(loginResponse.map { it.toUI() })
+                    val authModel = loginResponse.getOrThrow().toUI()
+
+                    val account = Account(email, "My Application")
+                    accountManager.addAccountExplicitly(account, password, null)
+                    accountManager.setAuthToken(account, "full_access", authModel.access_token)
+
+                    _signInState.value = SingInState.Success(authModel)
                 }
             } catch (e: Exception) {
                 _signInState.value = SingInState.Error(e.message ?: "An error occurred")

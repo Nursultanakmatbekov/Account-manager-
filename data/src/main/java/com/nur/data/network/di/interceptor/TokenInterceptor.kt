@@ -1,40 +1,40 @@
 package com.nur.data.network.di.interceptor
 
-import com.nur.data.local.prefs.TokenPreferenceHelper
+import android.accounts.AccountManager
+import android.content.Context
 import okhttp3.Interceptor
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Response
-import okhttp3.ResponseBody
-import okhttp3.ResponseBody.Companion.toResponseBody
-import java.net.ProtocolException
 import javax.inject.Inject
 
+// Интерсептор для добавления токена аутентификации в HTTP-запросы
 class TokenInterceptor @Inject constructor(
-    private val tokenPreferenceHelper: TokenPreferenceHelper
+    private val context: Context // Внедрение контекста приложения
 ) : Interceptor {
 
+    // Метод перехвата запросов
     override fun intercept(chain: Interceptor.Chain): Response {
-        var request = chain.request()
-        val builder = request.newBuilder()
-        if (request.header("Authorization") == null) {
-            tokenPreferenceHelper.accessToken?.let { token ->
-                builder.addHeader(
-                    "Authorization",
-                    "Bearer $token"
-                )
-            }
-        }
-        return try {
-            chain.proceed(builder.build())
-        } catch (e: ProtocolException) {
-            val emptyBody = "".toResponseBody("text/plain".toMediaTypeOrNull())
-            ResponseBody
+        // Получение оригинального HTTP-запроса
+        val request = chain.request()
 
-            return chain.proceed(builder.build())
-                .newBuilder()
-                .code(200)
-                .body(emptyBody)
-                .build()
+        // Получение экземпляра AccountManager для управления учетными записями
+        val accountManager = AccountManager.get(context)
+
+        // Получение всех учетных записей типа "My Application"
+        val accounts = accountManager.getAccountsByType("My Application")
+
+        // Извлечение токена аутентификации из первой найденной учетной записи
+        val token = accounts.firstOrNull()?.let { account ->
+            accountManager.peekAuthToken(account, "full_access") // Попытка получить токен
         }
+
+        // Создание нового запроса с заголовком Authorization, если токен доступен
+        val newRequest = token?.let {
+            request.newBuilder()
+                .addHeader("Authorization", "Bearer $it") // Добавление заголовка с токеном
+                .build() // Создание нового запроса
+        } ?: request // Если токен отсутствует, используем оригинальный запрос
+
+        // Выполнение запроса с модифицированными заголовками
+        return chain.proceed(newRequest)
     }
 }

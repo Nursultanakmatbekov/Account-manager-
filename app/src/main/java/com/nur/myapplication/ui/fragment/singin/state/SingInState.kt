@@ -5,6 +5,6 @@ import com.nur.myapplication.models.auth.LoginResponseUI
 sealed class SingInState {
     object Idle : SingInState()
     object Loading : SingInState()
-    data class Success(val loginResponse: Result<LoginResponseUI>) : SingInState()
+    data class Success(val loginResponse: LoginResponseUI) : SingInState()
     data class Error(val message: String) : SingInState()
 }

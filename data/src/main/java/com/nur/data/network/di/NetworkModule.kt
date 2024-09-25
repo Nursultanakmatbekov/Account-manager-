@@ -1,7 +1,10 @@
 package com.nur.data.network.di
 
+import android.accounts.AccountManager
 import android.content.Context
-import com.nur.data.local.prefs.TokenPreferenceHelper
+import com.nur.data.local.AccountUtils
+import com.nur.data.local.ApiAuthenticator
+import com.nur.data.local.IServerAuthenticator
 import com.nur.data.network.apiservice.AnimeApiService
 import com.nur.data.network.apiservice.SignInApiService
 import com.nur.data.network.di.interceptor.TokenInterceptor
@@ -27,29 +30,59 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthenticatedRetrofit(tokenInterceptor: TokenInterceptor): Retrofit {
-        val httpLoggingInterceptor =
-            HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY)
-
-        val clientBuilder = OkHttpClient.Builder().apply {
-            addInterceptor(httpLoggingInterceptor)
-            connectTimeout(60, TimeUnit.SECONDS)
-            readTimeout(60, TimeUnit.SECONDS)
-            writeTimeout(60, TimeUnit.SECONDS)
-            addInterceptor(tokenInterceptor)
+    fun provideOkHttpClient(tokenInterceptor: TokenInterceptor): OkHttpClient {
+        val loggingInterceptor = HttpLoggingInterceptor().apply {
+            setLevel(HttpLoggingInterceptor.Level.BODY)
         }
 
-        return Retrofit.Builder()
-            .baseUrl("https://kitsu.io/api/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .client(clientBuilder.build())
+        return OkHttpClient.Builder()
+            .addInterceptor(loggingInterceptor)
+            .addInterceptor(tokenInterceptor)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
     @Provides
     @Singleton
-    fun provideApiService(retrofit: Retrofit): AnimeApiService {
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://kitsu.io/api/") // Укажите ваш базовый URL
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(okHttpClient)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAnimeApiService(retrofit: Retrofit): AnimeApiService {
         return retrofit.create(AnimeApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideSignInApiService(retrofit: Retrofit): SignInApiService {
+        return retrofit.create(SignInApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideApiAuthenticator(signInApiService: SignInApiService): IServerAuthenticator {
+        return ApiAuthenticator(signInApiService)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccountManager(@ApplicationContext context: Context): AccountManager {
+        return AccountManager.get(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideAccountUtils(apiAuthenticator: IServerAuthenticator): AccountUtils {
+        AccountUtils.initialize(apiAuthenticator)
+        return AccountUtils
     }
 
     @Provides
@@ -60,25 +93,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthService(retrofit: Retrofit): SignInApiService {
-        return retrofit.create(SignInApiService::class.java)
-    }
-
-    @Provides
-    @Singleton
-    fun provideAuthRepository(apiService: SignInApiService): SingInRepository {
-        return SingInRepositoryImpl(apiService)
-    }
-
-    @Provides
-    @Singleton
-    fun provideTokenPreferenceHelper(@ApplicationContext context: Context): TokenPreferenceHelper {
-        return TokenPreferenceHelper(context)
-    }
-
-    @Provides
-    @Singleton
-    fun provideTokenInterceptor(tokenPreferenceHelper: TokenPreferenceHelper): TokenInterceptor {
-        return TokenInterceptor(tokenPreferenceHelper)
+    fun provideSignInRepository(apiAuthenticator: SignInApiService): SingInRepository {
+        return SingInRepositoryImpl(apiAuthenticator)
     }
 }

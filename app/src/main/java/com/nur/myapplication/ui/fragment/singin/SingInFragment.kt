@@ -8,37 +8,32 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import by.kirich1409.viewbindingdelegate.viewBinding
-import com.nur.data.local.prefs.TokenPreferenceHelper
 import com.nur.myapplication.R
 import com.nur.myapplication.databinding.FragmentSingInBinding
 import com.nur.myapplication.ui.fragment.singin.state.SignInIntent
 import com.nur.myapplication.ui.fragment.singin.state.SingInState
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import javax.inject.Inject
+
 @AndroidEntryPoint
 class SingInFragment : Fragment(R.layout.fragment_sing_in) {
 
     private val binding: FragmentSingInBinding by viewBinding(FragmentSingInBinding::bind)
     private val viewModel: SingInViewModel by viewModels()
 
-    @Inject
-    lateinit var tokenPreferenceHelper: TokenPreferenceHelper
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        if (tokenPreferenceHelper.authIsShown) {
-            findNavController().navigate(R.id.action_singInFragment_to_homeFragment)
-        } else {
-            setupListeners()
-            observeViewModel()
-        }
+        setupListeners()
+        observeViewModel()
     }
 
     private fun setupListeners() {
         binding.btmSingin.setOnClickListener {
             if (validateInput()) {
-                viewModel.send(SignInIntent.Submit(binding.etEmail.text.toString(), binding.etPassword.text.toString()))
+                val email = binding.etEmail.text.toString().trim()
+                val password = binding.etPassword.text.toString().trim()
+                viewModel.send(SignInIntent.Submit(email, password))
             }
         }
     }
@@ -67,35 +62,33 @@ class SingInFragment : Fragment(R.layout.fragment_sing_in) {
         lifecycleScope.launch {
             viewModel.signInState.collect { state ->
                 when (state) {
-                    is SingInState.Idle -> { }
+                    is SingInState.Idle -> {
+                        hideProgressBar()
+                    }
 
                     is SingInState.Loading -> {
-                        binding.progressBar.visibility = View.VISIBLE
+                        showProgressBar()
                     }
 
                     is SingInState.Success -> {
-                        binding.progressBar.visibility = View.GONE
-
-                        val loginResponse = state.loginResponse
-                        if (loginResponse.isSuccess) {
-                            loginResponse.map {
-                                tokenPreferenceHelper.refreshToken = it.refresh_token
-                                tokenPreferenceHelper.accessToken = it.access_token
-                                tokenPreferenceHelper.authIsShown = true
-                                findNavController().navigate(R.id.action_singInFragment_to_homeFragment)
-                            }
-                        } else {
-                            Toast.makeText(requireContext(), "Неверный пароль или email", Toast.LENGTH_SHORT).show()
-
-                        }
+                        hideProgressBar()
+                        findNavController().navigate(R.id.action_singInFragment_to_homeFragment)
                     }
 
                     is SingInState.Error -> {
-                        binding.progressBar.visibility = View.GONE
+                        hideProgressBar()
                         Toast.makeText(requireContext(), state.message, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
         }
+    }
+
+    private fun showProgressBar() {
+        binding.progressBar.visibility = View.VISIBLE
+    }
+
+    private fun hideProgressBar() {
+        binding.progressBar.visibility = View.GONE
     }
 }
